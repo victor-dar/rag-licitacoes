@@ -1,0 +1,79 @@
+{
+  "name": "Atualizar base de licitações",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [ { "field": "weeks", "triggerAtDay": [1], "triggerAtHour": 6 } ] }
+      },
+      "id": "a1b2c3d4-0001-4000-8000-000000000001",
+      "name": "Toda segunda, 6h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "url": "https://www.planalto.gov.br/ccivil_03/_ato2019-2022/2021/lei/L14133.htm",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [ { "name": "User-Agent", "value": "rag-licitacoes/1.0" } ] },
+        "options": { "response": { "response": { "responseFormat": "text" } } }
+      },
+      "id": "a1b2c3d4-0002-4000-8000-000000000002",
+      "name": "Baixar texto da lei",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [240, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\nconst conteudo = typeof $json.data === 'string' ? $json.data : JSON.stringify($json);\nconst hash = crypto.createHash('sha256').update(conteudo).digest('hex');\nconst estado = $getWorkflowStaticData('global');\nconst mudou = estado.hash !== hash;\nestado.hash = hash;\nreturn [{ json: { mudou, hash } }];"
+      },
+      "id": "a1b2c3d4-0003-4000-8000-000000000003",
+      "name": "Comparar hash",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 0]
+    },
+    {
+      "parameters": {
+        "conditions": { "boolean": [ { "value1": "={{ $json.mudou }}", "value2": true } ] }
+      },
+      "id": "a1b2c3d4-0004-4000-8000-000000000004",
+      "name": "Mudou?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [720, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://api:8000/reindex",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [ { "name": "X-Admin-Token", "value": "={{ $env.ADMIN_TOKEN }}" } ] }
+      },
+      "id": "a1b2c3d4-0005-4000-8000-000000000005",
+      "name": "Reindexar na API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, -80]
+    },
+    {
+      "parameters": {},
+      "id": "a1b2c3d4-0006-4000-8000-000000000006",
+      "name": "Sem mudanças",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [960, 100]
+    }
+  ],
+  "connections": {
+    "Toda segunda, 6h": { "main": [ [ { "node": "Baixar texto da lei", "type": "main", "index": 0 } ] ] },
+    "Baixar texto da lei": { "main": [ [ { "node": "Comparar hash", "type": "main", "index": 0 } ] ] },
+    "Comparar hash": { "main": [ [ { "node": "Mudou?", "type": "main", "index": 0 } ] ] },
+    "Mudou?": { "main": [
+      [ { "node": "Reindexar na API", "type": "main", "index": 0 } ],
+      [ { "node": "Sem mudanças", "type": "main", "index": 0 } ]
+    ] }
+  },
+  "settings": { "executionOrder": "v1" }
+}
